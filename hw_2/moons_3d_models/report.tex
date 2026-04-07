@@ -1,0 +1,118 @@
+% !TEX program = xelatex
+% 推荐使用 XeLaTeX 编译以正确显示中文
+\documentclass[UTF8,a4paper,11pt]{ctexart}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+\title{三维数据集上分类方法对比实验报告\\（Decision Trees / AdaBoost + Decision Trees / SVM）}
+\author{（填写姓名 / 学号）}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+在任务书规定的三维月牙数据与划分下，报告从零实现的 \textbf{Gini 决策树}、以该树为弱学习器的 \textbf{AdaBoost}，以及 \textbf{sklearn.svm.SVC} 在 \textbf{linear、rbf、poly} 三种核上的测试集表现（准确率及对 \textbf{C1} 的查准率、查全率），并从数据几何与归纳偏置角度解释\textbf{何者更优及原因}。
+\end{abstract}
+
+\section{任务书要求}
+给定程序生成\textbf{三维}数据集，共 \textbf{1000} 个样本、两大类 \textbf{C0} 与 \textbf{C1}。利用该数据\textbf{训练}分类器，并\textbf{重新生成}与训练数据\textbf{同分布}的 \textbf{500} 个样本（\textbf{C0} 250、\textbf{C1} 250）作为\textbf{测试集}。比较 \textbf{Decision Trees}、\textbf{AdaBoost + Decision Trees} 与 \textbf{SVM} 的分类性能，并讨论\textbf{对于本问题，为何某些算法表现相对更好}。其中 \textbf{SVM 至少选用三种不同的核函数（kernel functions）}。
+
+本文与同目录 Jupyter 笔记本 \texttt{make\_moons\_3d\_classification.ipynb} 一致：标签 \texttt{0} 记为 \textbf{C0}，\texttt{1} 记为 \textbf{C1}。
+
+\section{数据集与协议}
+\subsection{生成与划分}
+对每类样本数 $n$，在参数 $t \in [0, 2\pi]$ 上构造三维两月牙并叠加各向同性高斯噪声。与任务书及程序一致：
+\begin{itemize}
+  \item \textbf{训练集}：$2 \times 500 = 1000$ 点（\textbf{C0}、\textbf{C1} 各 500），噪声标准差 $\sigma = 0.2$；
+  \item \textbf{测试集}：再次调用同一生成函数独立采样 $2 \times 250 = 500$ 点（\textbf{C0}、\textbf{C1} 各 250），与训练\textbf{同分布}且\textbf{不参与训练}；
+  \item 使用 \texttt{numpy.random.seed(42)} 保证可复现（先采训练集再采测试集，相当于连续两次独立同分布抽样）。
+\end{itemize}
+
+\subsection{评价指标}
+在测试集上报告\textbf{准确率}；并针对\textbf{C1}（正类）报告\textbf{查准率} $\mathrm{TP}/(\mathrm{TP}+\mathrm{FP})$ 与\textbf{查全率} $\mathrm{TP}/(\mathrm{TP}+\mathrm{FN})$。
+
+\section{方法（对应任务书三项）}
+\subsection{Decision Trees}
+手写基于\textbf{加权基尼不纯度}的二叉树（未使用 \texttt{sklearn.tree}）。节点内权重 $w_i$，$W=\sum_i w_i$，$W_c=\sum_{i:y_i=c} w_i$（$c\in\{0,1\}$ 即 \textbf{C0/C1}）：
+\begin{equation}
+  G = 1 - \left(\frac{W_0}{W}\right)^2 - \left(\frac{W_1}{W}\right)^2.
+\end{equation}
+候选分裂最小化子节点加权基尼 $G_{\mathrm{split}} = \frac{W_L}{W} G_L + \frac{W_R}{W} G_R$。\texttt{fit} 支持 \texttt{sample\_weight}，供 AdaBoost 使用。实验中\textbf{单棵决策树}取较大深度（如 \texttt{max\_depth=8}）作为非提升基线。
+
+\subsection{AdaBoost + Decision Trees}
+未使用 \texttt{sklearn.ensemble}。弱学习器为上一节\textbf{手动决策树}；提升部分采用离散 AdaBoost，$y_i^{\pm}\in\{-1,+1\}$（\textbf{C0}$\to -1$，\textbf{C1}$\to +1$），加权错误率
+\begin{equation}
+  \varepsilon_t = \frac{\sum_i w_i^{(t)} \mathbb{1}[h_t(x_i) \neq y_i^{\pm}]}{\sum_i w_i^{(t)}}.
+\end{equation}
+令 $\alpha_t = \frac{1}{2}\ln\frac{1-\varepsilon_t}{\varepsilon_t}$，权重更新为
+\begin{equation}
+  \label{eq:boost-weights}
+  w_i^{(t+1)} \propto w_i^{(t)} \exp\bigl(-\alpha_t\, y_i^{\pm}\, h_t(x_i)\bigr),
+\end{equation}
+归一化后训练下一轮。最终 $\mathrm{sign}(\sum_t \alpha_t h_t(x))$。弱学习器取\textbf{决策桩}（\texttt{max\_depth=1}），对应\textbf{AdaBoost + Decision Trees}的常见设置。
+
+\subsection{SVM 与三种核函数}
+使用 \texttt{sklearn.svm.SVC}，满足任务书「\textbf{至少三种 kernel}」：\textbf{linear}、\textbf{rbf}（\texttt{gamma='scale'}）、\textbf{poly}（次数 3，\texttt{coef0=1.0}），$C=1.0$，\texttt{random\_state=42}。
+
+\section{实验结果}
+表~\ref{tab:metrics} 为 \texttt{seed=42} 下与笔记本一致实现得到的\textbf{测试集}指标（重新运行笔记本时以最新输出为准）。
+
+\begin{table}[htbp]
+  \centering
+  \caption{任务书测试集（500 点，C0/C1 各 250）上的性能；Precision/Recall 针对 \textbf{C1}}
+  \label{tab:metrics}
+  \begin{tabular}{lccc}
+    \toprule
+    方法（与任务书对应） & 准确率 & 查准率 (C1) & 查全率 (C1) \\
+    \midrule
+    Decision Trees（Gini，手写） & 0.8160 & 0.8135 & 0.8200 \\
+    AdaBoost + Decision Trees（决策桩） & 0.7300 & 0.7091 & 0.7800 \\
+    SVM + linear kernel & 0.6880 & 0.6865 & 0.6920 \\
+    SVM + RBF kernel & 0.9820 & 0.9801 & 0.9840 \\
+    SVM + poly kernel & 0.9800 & 0.9800 & 0.9800 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \fbox{\parbox[c][0.22\textheight][c]{0.85\textwidth}{\centering
+    （可选）插入笔记本导出的训练/测试三维散点图，如 \texttt{figures/moons3d\_train\_test.pdf}
+  }}
+  \caption{三维 \textbf{C0/C1} 分布示意；可将笔记本图形导出至 \texttt{figures/} 后用 \texttt{\textbackslash includegraphics} 插入。}
+  \label{fig:placeholder}
+\end{figure}
+
+\section{讨论：为何某些算法在本问题上更好}
+\subsection{Decision Trees}
+轴平行分裂用大量与坐标面对齐的台阶逼近\textbf{弯曲月牙}，在 $\sigma=0.2$ 噪声下易出现\textbf{过拟合}或\textbf{边界碎片化}，故单独决策树往往\textbf{中等}表现，不如能直接学习\textbf{平滑非线性边界}的核 SVM。
+
+\subsection{AdaBoost + Decision Trees}
+式~\eqref{eq:boost-weights} 使\textbf{误分样本权重增大}，后续\textbf{决策树（桩）}更关注难分区域，投票组合多个弱边界，\textbf{强于}单棵浅树。但弱学习器仍是轴平行模型，在强噪声与非线性几何下可能\textbf{不稳定或仍不足}，本组超参下可\textbf{低于} RBF/poly SVM。
+
+\subsection{SVM 与三种核}
+\textbf{线性核}等价于单个分离超平面，\textbf{C0/C1} 在三维嵌入后通常\textbf{线性不可分}，故常\textbf{欠拟合}。\textbf{RBF} 与\textbf{多项式}核引入非线性，更易贴合\textbf{簇状弯曲}结构；RBF 侧重\textbf{局部相似度}，多项式核形状受次数约束，二者常显著优于线性核，具体排序依赖 $C$、$\gamma$ 等调参。
+
+\section{结论}
+在任务书给定的三维月牙设定下，\textbf{非线性核 SVM（RBF、多项式）}与数据几何匹配最好，测试指标最高；\textbf{Decision Trees} 次之；\textbf{AdaBoost + Decision Trees} 通过重加权有理论优势，但在本实验配置下未超过最优核 SVM。后续可对树深度、提升轮数及 SVM 超参做系统搜索或交叉验证。
+
+\begin{thebibliography}{9}
+  \bibitem{sklearn}
+  Pedregosa, F. et al.
+  \newblock Scikit-learn: Machine Learning in Python.
+  \newblock \emph{JMLR} 12 (2011), 2825--2830.
+  \bibitem{freund1999}
+  Freund, Y. and Schapire, R.~E.
+  \newblock A Short Introduction to Boosting.
+  \newblock \emph{Journal of Japanese Society for Artificial Intelligence}, 1999.
+\end{thebibliography}
+
+\end{document}
