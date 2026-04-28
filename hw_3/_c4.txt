@@ -1,0 +1,25 @@
+# 5. 构建LSTM模型
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
+
+# 设置随机种子以保证可重复性
+np.random.seed(42)
+tf.random.set_seed(42)
+
+# 获取特征数量
+n_features = X_train.shape[2]
+
+# 构建LSTM模型
+model = Sequential([
+    LSTM(64, return_sequences=True, input_shape=(seq_length, n_features)),
+    Dropout(0.2),
+    LSTM(32, return_sequences=False),
+    Dropout(0.2),
+    Dense(16, activation='relu'),
+    Dense(1)
+])
+
+model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+model.summary()

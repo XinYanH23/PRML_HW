@@ -1,0 +1,13 @@
+# 6. 训练模型
+early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+history = model.fit(
+    X_train, y_train,
+    epochs=30,
+    batch_size=64,
+    validation_split=0.1,
+    callbacks=[early_stop],
+    verbose=1
+)
+
+print("\n训练完成!")
