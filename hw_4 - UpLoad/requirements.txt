@@ -1,0 +1,8 @@
+# hw_4 Transformer / Multi30k 实验（按需安装；版本可按本地 CUDA 调整 torch 轮子）
+torch>=2.0
+torchtext>=0.17
+torchdata>=0.7
+tqdm>=4.65
+matplotlib>=3.7
+nltk>=3.8
+spacy>=3.7

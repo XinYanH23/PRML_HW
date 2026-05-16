@@ -1,0 +1,7 @@
+{
+  "best_valid_bleu_x100": 12.720129305742104,
+  "best_epoch": 5,
+  "test_bleu_x100": 12.078885220448985,
+  "early_stopped": false,
+  "run_dir": "/home/hxy/桌面/2026PRML/hw_4/runs/run_1778835536975079123"
+}
